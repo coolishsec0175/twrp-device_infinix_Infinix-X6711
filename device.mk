@@ -14,14 +14,17 @@ $(call inherit-product, $(SRC_TARGET_DIR)/product/virtual_ab_ota/compression.mk)
 # A/B
 AB_OTA_UPDATER := true
 AB_OTA_PARTITIONS += \
-    system \
-    vendor \
-    product \
-    system_ext \
     boot \
-    vendor_boot \
+    dtbo \
+    lk \
+    product \
+    system \
+    system_ext \
+    vbmeta \
+    vbmeta_system \
     vbmeta_vendor \
-    vbmeta_system
+    vendor \
+    vendor_boot
 
 PRODUCT_PACKAGES += \
     checkpoint_gc
