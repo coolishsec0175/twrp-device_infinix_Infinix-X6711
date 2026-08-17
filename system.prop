@@ -1,0 +1,8 @@
+# Fstab
+ro.postinstall.fstab.prefix=/system
+
+# USB MTP
+ro.sys.usb.storage.type=mtp
+
+# Keymaster
+keymaster_ver=4.1
