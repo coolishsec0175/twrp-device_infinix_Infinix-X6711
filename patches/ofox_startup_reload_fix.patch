@@ -1,0 +1,145 @@
+diff --git a/bootable/recovery/gui/gui.h b/bootable/recovery/gui/gui.h
+index 034f1cd..4e5abf2 100644
+--- a/bootable/recovery/gui/gui.h
++++ b/bootable/recovery/gui/gui.h
+@@ -24,6 +24,7 @@
+ int gui_init();
+ int gui_loadResources();
+ int gui_loadCustomResources();
++bool gui_validate_theme_files();
+ int gui_start();
+ int gui_startPage(const char* page_name, const int allow_comands, int stop_on_page_done);
+ void gui_print(const char *fmt, ...);
+diff --git a/bootable/recovery/gui/pages.cpp b/bootable/recovery/gui/pages.cpp
+index c8d34a0..38fd2a2 100644
+--- a/bootable/recovery/gui/pages.cpp
++++ b/bootable/recovery/gui/pages.cpp
+@@ -1530,6 +1530,66 @@ int PageManager::ReloadPackage(std::string name, std::string package)
+ 	return 0;
+ }
+ 
++// Validate the saved OrangeFox theme/navbar files before a theme reload.
++// Returns true if there is nothing to validate, or if every saved file is
++// readable and well-formed XML. If any file is missing/invalid (e.g. it was
++// written by an older or different OFOX build), the stale theme and navbar
++// directories are removed so that the theme reload (reapply_settings page)
++// cannot stall the GUI, and false is returned.
++//
++// Note: rapidxml's parse_error_handler is replaced by a non-throwing handler
++// (gui/gui.cpp), so parse errors surface as an empty/incomplete document, which
++// is detected below via the root element check.
++bool gui_validate_theme_files()
++{
++	if (!TWFunc::Path_Exists(FOX_THEME_PATH) && !TWFunc::Path_Exists(FOX_NAVBAR_PATH))
++		return true;
++
++	std::string theme_path = FOX_THEME_PATH;
++	std::string navbar_path = FOX_NAVBAR_PATH;
++	const std::string theme_files[] = {
++		theme_path + "/font.xml",
++		theme_path + "/style.xml",
++		theme_path + "/accent.xml",
++		theme_path + "/action.xml",
++		navbar_path + "/navbar.xml"
++	};
++
++	bool valid = true;
++	for (const std::string& file : theme_files) {
++		// missing files are fine - the theme provides a default fallback for them
++		if (!TWFunc::Path_Exists(file))
++			continue;
++
++		char* buffer = PageManager::LoadFileToBuffer(file, NULL);
++		if (!buffer) {
++			LOGERR("OrangeFox: theme file '%s' is not readable.\n", file.c_str());
++			valid = false;
++			break;
++		}
++		{
++			xml_document<> doc;
++			doc.parse<0>(buffer);
++			free(buffer);
++			xml_node<>* root = doc.first_node("recovery");
++			if (!root)
++				root = doc.first_node("install");
++			if (!root) {
++				LOGERR("OrangeFox: theme file '%s' has an invalid root element.\n", file.c_str());
++				valid = false;
++				break;
++			}
++		}
++	}
++
++	if (!valid) {
++		LOGERR("OrangeFox: discarding stale theme/navbar - the stock theme will be used.\n");
++		TWFunc::removeDir(FOX_THEME_PATH, false);
++		TWFunc::removeDir(FOX_NAVBAR_PATH, false);
++	}
++	return valid;
++}
++
+ void PageManager::ReleasePackage(std::string name)
+ {
+ 	std::map<std::string, PageSet*>::iterator iter;
+diff --git a/bootable/recovery/gui/action.cpp b/bootable/recovery/gui/action.cpp
+index 66ea197..b55aeed 100644
+--- a/bootable/recovery/gui/action.cpp
++++ b/bootable/recovery/gui/action.cpp
+@@ -68,6 +68,7 @@ extern "C" {
+ #include "rapidxml.hpp"
+ #include "objects.hpp"
+ #include "tw_atomic.hpp"
++#include "gui.h"
+ 
+ GUIAction::mapFunc GUIAction::mf;
+ std::set < string > GUIAction::setActionsRunningInCallerThread;
+@@ -804,6 +805,12 @@ int GUIAction::check_and_reload(std::string arg __unused)
+   }
+   
+   if (TWFunc::Path_Exists(FOX_THEME_PATH) || TWFunc::Path_Exists(FOX_NAVBAR_PATH)) {
++    // Discard any stale/broken theme files before reloading, so the reload
++    // (reapply_settings) is only attempted with a valid saved theme.
++    if (!gui_validate_theme_files()) {
++      gui_changePage(DataManager::GetStrValue("of_reload_back"));
++      return 0;
++    }
+     PageManager::RequestReload();
+     gui_changePage("reapply_settings");
+   } else {
+diff --git a/bootable/recovery/twrp.cpp b/bootable/recovery/twrp.cpp
+index ecf2515..701d4d6 100644
+--- a/bootable/recovery/twrp.cpp
++++ b/bootable/recovery/twrp.cpp
+@@ -389,6 +389,10 @@ static bool Fox_CheckReload_Themes() {
+   || TWFunc::Fox_Property_Get("orangefox.mount_to_decrypt") == "1") {
+ 	DataManager::SetValue(FOX_ENCRYPTED_DEVICE, "1");
+     }
++  // Discard any stale/broken theme files, so that a theme reload is only ever
++  // attempted with a valid saved theme (see gui_validate_theme_files()).
++  if (!gui_validate_theme_files())
++	return false;
+   return (TWFunc::Path_Exists(FOX_THEME_PATH) || TWFunc::Path_Exists(FOX_NAVBAR_PATH));
+ }
+ 
+@@ -600,12 +604,15 @@ int main(int argc, char **argv) {
+   	TWFunc::Setup_Verity_Forced_Encryption();
+ 
+ 	// Launch the main GUI
+-	if (Fox_CheckReload_Themes()) {
+-		//[f/d] Start UI using reapply_settings page (executed on recovery startup)
+-		DataManager::SetValue("of_reload_back", "main");
+-		PageManager::RequestReload();
+-		gui_startPage("reapply_settings", 1, 0);
+-	} else gui_start();
++	// update the encryption state and discard any stale theme files before
++	// starting the UI (see Fox_CheckReload_Themes / gui_validate_theme_files)
++	Fox_CheckReload_Themes();
++	// [f/d] Don't auto-start the theme reload from here. On devices where /data
++	// auto-decrypts (no lockscreen), running the reload (reapply_settings page)
++	// at this early stage can stall the GUI. The saved theme is (re)applied by
++	// the "check_and_reload" action after decryption, or from the Customization
++	// page; the stock theme is used until then.
++	gui_start();
+ 
+ 	delete adb_bu_fifo;
+ 	TWFunc::Update_Intent_File(startup.Get_Intent());
