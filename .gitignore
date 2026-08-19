@@ -1,0 +1,18 @@
+# Build artifacts
+out/
+*.img
+*.zip
+
+# Logs
+recovery.log
+*.log
+
+# Editor / OS files
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# Patch scratch
+*.orig
+*.rej
