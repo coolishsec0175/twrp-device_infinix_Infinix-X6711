@@ -1,4 +1,112 @@
-diff --git a/bootable/recovery/gui/gui.h b/bootable/recovery/gui/gui.h
+﻿diff --git a/bootable/recovery/data.cpp b/data.cpp
+index 5373ff7..164ea3e 100755
+--- a/bootable/recovery/data.cpp
++++ b/bootable/recovery/data.cpp
+@@ -55,6 +55,32 @@ extern "C"
+ 
+ using namespace std;
+ 
++// Find a usable CPU temperature file. On MediaTek devices the thermal zone
++// number assigned to the CPU is NOT stable across boots (zones are enumerated
++// in an arbitrary order), so probe each zone's "type" attribute and pick the
++// one that matches the CPU (mtktscpu / cpu-thermal / cpu_thermal). Falls back
++// to TW_CUSTOM_CPU_TEMP_PATH (if it exists), then thermal_zone0.
++static std::string Find_CPU_Temp_File()
++{
++#ifdef TW_CUSTOM_CPU_TEMP_PATH
++	std::string custom = EXPAND(TW_CUSTOM_CPU_TEMP_PATH);
++	if (TWFunc::Path_Exists(custom))
++		return custom;
++#endif
++	for (int i = 0; i < 40; i++) {
++		std::string zone = "/sys/class/thermal/thermal_zone" + std::to_string(i);
++		std::string type_file = zone + "/type";
++		if (TWFunc::Path_Exists(type_file)) {
++			std::string type;
++			if (TWFunc::read_file(type_file, type) == 0 &&
++			    (type.find("cpu") != std::string::npos ||
++			     type.find("mtkts") != std::string::npos))
++				return zone + "/temp";
++		}
++	}
++	return "/sys/class/thermal/thermal_zone0/temp";
++}
++
+ string DataManager::mBackingFile;
+ int DataManager::mInitialized = 0;
+ InfoManager DataManager::mPersist;	// Data that is not constant and will be saved to the settings file
+@@ -1015,12 +1041,7 @@ void DataManager::SetDefaultValues()
+   printf("TW_NO_CPU_TEMP := true\n");
+   mConst.SetValue("tw_no_cpu_temp", "1");
+ #else
+-  string cpu_temp_file;
+-#ifdef TW_CUSTOM_CPU_TEMP_PATH
+-  cpu_temp_file = EXPAND(TW_CUSTOM_CPU_TEMP_PATH);
+-#else
+-  cpu_temp_file = "/sys/class/thermal/thermal_zone0/temp";
+-#endif
++  string cpu_temp_file = Find_CPU_Temp_File();
+   if (TWFunc::Path_Exists(cpu_temp_file))
+     {
+       mConst.SetValue("tw_no_cpu_temp", "0");
+@@ -1534,15 +1555,9 @@ int DataManager::GetMagicValue(const string& varName, string& value)
+ 		gettimeofday(&curTime, NULL);
+ 		if (curTime.tv_sec > cpuSecCheck)
+ 		{
+-#ifdef TW_CUSTOM_CPU_TEMP_PATH
+-			cpu_temp_file = EXPAND(TW_CUSTOM_CPU_TEMP_PATH);
++			cpu_temp_file = Find_CPU_Temp_File();
+ 			if (TWFunc::read_file(cpu_temp_file, results) != 0)
+ 				return -1;
+-#else
+-			cpu_temp_file = "/sys/class/thermal/thermal_zone0/temp";
+-			if (TWFunc::read_file(cpu_temp_file, results) != 0)
+-				return -1;
+-#endif
+ 			convert_temp = strtoul(results.c_str(), NULL, 0) / 1000;
+ 			if (convert_temp <= 0)
+ 				convert_temp = strtoul(results.c_str(), NULL, 0);
+diff --git a/bootable/recovery/gui/action.cpp b/gui/action.cpp
+index 293dd16..4eec13f 100755
+--- a/bootable/recovery/gui/action.cpp
++++ b/bootable/recovery/gui/action.cpp
+@@ -68,6 +68,7 @@ extern "C" {
+ #include "rapidxml.hpp"
+ #include "objects.hpp"
+ #include "tw_atomic.hpp"
++#include "gui.h"
+ 
+ GUIAction::mapFunc GUIAction::mf;
+ std::set < string > GUIAction::setActionsRunningInCallerThread;
+@@ -794,6 +795,12 @@ int GUIAction::check_and_reload(std::string arg __unused)
+   }
+   
+   if (TWFunc::Path_Exists(FOX_THEME_PATH) || TWFunc::Path_Exists(FOX_NAVBAR_PATH)) {
++    // Discard any stale/broken theme files before reloading, so the reload
++    // (reapply_settings) is only attempted with a valid saved theme.
++    if (!gui_validate_theme_files()) {
++      gui_changePage(DataManager::GetStrValue("of_reload_back"));
++      return 0;
++    }
+     PageManager::RequestReload();
+     gui_changePage("reapply_settings");
+   } else {
+diff --git a/bootable/recovery/gui/gui.cpp b/gui/gui.cpp
+index 1f13ee2..eceee65 100644
+--- a/bootable/recovery/gui/gui.cpp
++++ b/bootable/recovery/gui/gui.cpp
+@@ -911,6 +911,10 @@ extern "C" int gui_init(void)
+ extern "C" int gui_loadResources(void)
+ {
+ #ifndef TW_OEM_BUILD
++	// Discard any stale/broken/version-mismatched theme files BEFORE the saved
++	// theme is loaded, so that a stale theme (e.g. written by an older OFOX
++	// build) can never be applied - applying it can stall the GUI.
++	gui_validate_theme_files();
+ 	int check = 0;
+ 	DataManager::GetValue(TW_IS_ENCRYPTED, check);
+ 
+diff --git a/bootable/recovery/gui/gui.h b/gui/gui.h
 index 034f1cd..4e5abf2 100644
 --- a/bootable/recovery/gui/gui.h
 +++ b/bootable/recovery/gui/gui.h
@@ -10,37 +118,82 @@ index 034f1cd..4e5abf2 100644
  int gui_start();
  int gui_startPage(const char* page_name, const int allow_comands, int stop_on_page_done);
  void gui_print(const char *fmt, ...);
-diff --git a/bootable/recovery/gui/pages.cpp b/bootable/recovery/gui/pages.cpp
-index c8d34a0..38fd2a2 100644
+diff --git a/bootable/recovery/gui/pages.cpp b/gui/pages.cpp
+index b182575..1ab302a 100755
 --- a/bootable/recovery/gui/pages.cpp
 +++ b/bootable/recovery/gui/pages.cpp
-@@ -1530,6 +1530,66 @@ int PageManager::ReloadPackage(std::string name, std::string package)
+@@ -1561,6 +1561,113 @@ int PageManager::ReloadPackage(std::string name, std::string package)
  	return 0;
  }
  
 +// Validate the saved OrangeFox theme/navbar files before a theme reload.
 +// Returns true if there is nothing to validate, or if every saved file is
-+// readable and well-formed XML. If any file is missing/invalid (e.g. it was
-+// written by an older or different OFOX build), the stale theme and navbar
-+// directories are removed so that the theme reload (reapply_settings page)
-+// cannot stall the GUI, and false is returned.
++// readable, version-correct and well-formed XML. If the saved theme was written
++// by an older/different OFOX build (version mismatch) or is otherwise
++// invalid/missing, the stale theme and navbar directories are removed so that
++// a theme reload (reapply_settings page) cannot stall the GUI, and false is
++// returned.
 +//
 +// Note: rapidxml's parse_error_handler is replaced by a non-throwing handler
 +// (gui/gui.cpp), so parse errors surface as an empty/incomplete document, which
 +// is detected below via the root element check.
 +bool gui_validate_theme_files()
 +{
-+	if (!TWFunc::Path_Exists(FOX_THEME_PATH) && !TWFunc::Path_Exists(FOX_NAVBAR_PATH))
++	std::string settings_path = DataManager::GetSettingsStoragePath();
++	if (settings_path.empty())
++		settings_path = "/sdcard";
++	std::string fox_dir = settings_path + "/Fox";
++
++	// Version check - the saved theme version is stored in the on-disk settings
++	// file. Read it directly from the file (not from DataManager, whose in-memory
++	// value may already have been bumped) and compare it against the current
++	// build's theme version. A mismatch means the saved theme files were written
++	// by an older/different OFOX build, so they MUST be discarded before they can
++	// be applied - applying them can stall the GUI. Using the resolved settings
++	// storage path also works early in boot, before the /sdcard symlink exists.
++	std::string saved_ver;
++	if (TWFunc::Path_Exists(fox_dir + "/.foxs")) {
++		InfoManager fox_settings(fox_dir + "/.foxs");
++		fox_settings.LoadValues();
++		fox_settings.GetValue("of_themes_version", saved_ver);
++	}
++	std::string build_ver = DataManager::GetStrValue("fox_theme_version");
++	if (build_ver.empty())
++		build_ver = "0";
++
++	bool version_mismatch = false;
++	if (saved_ver.empty()) {
++		// no saved version - if a theme still exists it was never stamped with
++		// the current theme version, so treat it as stale
++		if (TWFunc::Path_Exists(fox_dir + "/.theme") || TWFunc::Path_Exists(fox_dir + "/.navbar"))
++			version_mismatch = true;
++	} else if (saved_ver != build_ver) {
++		version_mismatch = true;
++	}
++
++	if (version_mismatch) {
++		LOGERR("OrangeFox: theme version mismatch (old='%s'; new='%s'); discarding stale theme/navbar - the stock theme will be used.\n",
++			saved_ver.c_str(), build_ver.c_str());
++		TWFunc::removeDir(fox_dir + "/.theme", false);
++		TWFunc::removeDir(fox_dir + "/.navbar", false);
++		TWFunc::removeDir(FOX_THEME_PATH, false);
++		TWFunc::removeDir(FOX_NAVBAR_PATH, false);
++		// stamp the current version so the reset only happens once
++		DataManager::SetValue("of_themes_version", build_ver);
++		DataManager::Flush();
++		return false;
++	}
++
++	// XML validation of the saved theme/navbar files (resolved paths)
++	if (!TWFunc::Path_Exists(fox_dir + "/.theme") && !TWFunc::Path_Exists(fox_dir + "/.navbar"))
 +		return true;
 +
-+	std::string theme_path = FOX_THEME_PATH;
-+	std::string navbar_path = FOX_NAVBAR_PATH;
 +	const std::string theme_files[] = {
-+		theme_path + "/font.xml",
-+		theme_path + "/style.xml",
-+		theme_path + "/accent.xml",
-+		theme_path + "/action.xml",
-+		navbar_path + "/navbar.xml"
++		fox_dir + "/.theme/font.xml",
++		fox_dir + "/.theme/style.xml",
++		fox_dir + "/.theme/accent.xml",
++		fox_dir + "/.theme/action.xml",
++		fox_dir + "/.navbar/navbar.xml"
 +	};
 +
 +	bool valid = true;
@@ -72,6 +225,8 @@ index c8d34a0..38fd2a2 100644
 +
 +	if (!valid) {
 +		LOGERR("OrangeFox: discarding stale theme/navbar - the stock theme will be used.\n");
++		TWFunc::removeDir(fox_dir + "/.theme", false);
++		TWFunc::removeDir(fox_dir + "/.navbar", false);
 +		TWFunc::removeDir(FOX_THEME_PATH, false);
 +		TWFunc::removeDir(FOX_NAVBAR_PATH, false);
 +	}
@@ -81,47 +236,22 @@ index c8d34a0..38fd2a2 100644
  void PageManager::ReleasePackage(std::string name)
  {
  	std::map<std::string, PageSet*>::iterator iter;
-diff --git a/bootable/recovery/gui/action.cpp b/bootable/recovery/gui/action.cpp
-index 66ea197..b55aeed 100644
---- a/bootable/recovery/gui/action.cpp
-+++ b/bootable/recovery/gui/action.cpp
-@@ -68,6 +68,7 @@ extern "C" {
- #include "rapidxml.hpp"
- #include "objects.hpp"
- #include "tw_atomic.hpp"
-+#include "gui.h"
- 
- GUIAction::mapFunc GUIAction::mf;
- std::set < string > GUIAction::setActionsRunningInCallerThread;
-@@ -804,6 +805,12 @@ int GUIAction::check_and_reload(std::string arg __unused)
-   }
-   
-   if (TWFunc::Path_Exists(FOX_THEME_PATH) || TWFunc::Path_Exists(FOX_NAVBAR_PATH)) {
-+    // Discard any stale/broken theme files before reloading, so the reload
-+    // (reapply_settings) is only attempted with a valid saved theme.
-+    if (!gui_validate_theme_files()) {
-+      gui_changePage(DataManager::GetStrValue("of_reload_back"));
-+      return 0;
-+    }
-     PageManager::RequestReload();
-     gui_changePage("reapply_settings");
-   } else {
-diff --git a/bootable/recovery/twrp.cpp b/bootable/recovery/twrp.cpp
-index ecf2515..701d4d6 100644
+diff --git a/bootable/recovery/twrp.cpp b/twrp.cpp
+index 6f9e858..e804438 100644
 --- a/bootable/recovery/twrp.cpp
 +++ b/bootable/recovery/twrp.cpp
-@@ -389,6 +389,10 @@ static bool Fox_CheckReload_Themes() {
-   || TWFunc::Fox_Property_Get("orangefox.mount_to_decrypt") == "1") {
- 	DataManager::SetValue(FOX_ENCRYPTED_DEVICE, "1");
-     }
+@@ -406,6 +406,10 @@ static bool Fox_CheckReload_Themes() {
+ #if defined(FOX_ALLOW_EARLY_SETTINGS_LOAD) && defined(FOX_SETTINGS_ROOT_DIRECTORY)
+   return false;
+ #else
 +  // Discard any stale/broken theme files, so that a theme reload is only ever
 +  // attempted with a valid saved theme (see gui_validate_theme_files()).
 +  if (!gui_validate_theme_files())
 +	return false;
    return (TWFunc::Path_Exists(FOX_THEME_PATH) || TWFunc::Path_Exists(FOX_NAVBAR_PATH));
+ #endif
  }
- 
-@@ -600,12 +604,15 @@ int main(int argc, char **argv) {
+@@ -639,12 +643,15 @@ int main(int argc, char **argv) {
    	TWFunc::Setup_Verity_Forced_Encryption();
  
  	// Launch the main GUI
