@@ -104,10 +104,7 @@ RECOVERY_LIBRARY_SOURCE_FILES += \
     $(TARGET_OUT_SHARED_LIBRARIES)/libion.so \
     $(TARGET_OUT_SHARED_LIBRARIES)/libxml2.so
 
- PRODUCT_COPY_FILES += \
-    $(LOCAL_PATH)/recovery/root/system/bin/postrecoveryboot.sh:system/bin/postrecoveryboot.sh   
-
-# Dynamic Partitions
+ # Dynamic Partitions
 PRODUCT_USE_DYNAMIC_PARTITIONS := true
 
 # VNDK
