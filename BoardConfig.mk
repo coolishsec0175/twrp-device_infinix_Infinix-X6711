@@ -148,6 +148,7 @@ TARGET_SCREEN_DENSITY := 480
 TW_EXTRA_LANGUAGES      := true
 TW_FRAMERATE            := 60
 TW_BRIGHTNESS_PATH      := "/sys/class/leds/lcd-backlight/brightness"
+TW_CUSTOM_CPU_TEMP_PATH := "/sys/class/thermal/thermal_zone5/temp"
 TW_MAX_BRIGHTNESS       := 2047
 TW_DEFAULT_BRIGHTNESS   := 1200
 TW_NO_SCREEN_BLANK      := true
