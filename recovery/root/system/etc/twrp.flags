@@ -27,32 +27,13 @@
 /nvram			emmc		/dev/block/by-name/nvram										flags=display=nvram;backup;flashimg
 /proinfo		emmc		/dev/block/by-name/proinfo										flags=display=proinfo;backup
 
-# Standard MediaTeks's partitions
-/tkv			emmc		/dev/block/by-name/tkv											flags=display=tkv;backup
-/gz			emmc		/dev/block/by-name/gz											flags=display=gz;backup
-/mcupm			emmc		/dev/block/by-name/mcupm										flags=display=mcupm;backup
-/sspm			emmc		/dev/block/by-name/sspm										flags=display=sspm;backup
-/ccu			emmc		/dev/block/by-name/ccu											flags=display=ccu;backup
-/scp			emmc		/dev/block/by-name/scp											flags=display=scp;backup
-/dpm			emmc		/dev/block/by-name/dpm											flags=display=dpm;backup
-/pi_img			emmc		/dev/block/by-name/pi_img										flags=display=pi_img;backup
-/md1img			emmc		/dev/block/by-name/md1img										flags=display=md1img;backup
-/apusys			emmc		/dev/block/by-name/apusys										flags=display=apusys;backup
-/lk			emmc		/dev/block/by-name/lk											flags=display=lk;slotselect;backup;flashimg
+# Bootloader
+/lk			emmc		/dev/block/by-name/lk											flags=display=lk;slotselect;backup
 /expdb			emmc		/dev/block/by-name/expdb										flags=display=expdb;backup
-/logo			emmc		/dev/block/by-name/logo											flags=display=logo;slotselect;backup;flashimg
+/logo			emmc		/dev/block/by-name/logo											flags=display=logo;backup
 /otp			emmc		/dev/block/by-name/otp											flags=display=otp;backup
 /seccfg			emmc		/dev/block/by-name/seccfg										flags=display=seccfg;backup
-/spmfw			emmc		/dev/block/by-name/spmfw										flags=display=spmfw;backup
-/tee			emmc		/dev/block/by-name/tee											flags=display=tee;backup
 
 # Removable Storage
 /external_sd		auto		/dev/block/mmcblk1p1				/dev/block/mmcblk0p1					flags=display="Micro SD Card";storage;wipeingui;removable;backup=0
 /usb_otg		auto		/dev/block/sda1					/dev/block/sda		/dev/block/sdd1			flags=display="USB-OTG";storage;wipeingui;removable;backup=0
-
-# Flashable logical partitions
-/system_image		emmc		/dev/block/bootdevice/by-name/system									flags=backup;flashimg
-/vendor_image		emmc		/dev/block/bootdevice/by-name/vendor									flags=backup;flashimg
-/system_ext_image	emmc		/dev/block/bootdevice/by-name/system_ext								flags=display="System_EXT Image";backup;flashimg
-/product_image		emmc		/dev/block/bootdevice/by-name/product									flags=display="Product Image";backup;flashimg
-/vendor_dlkm_image	emmc		/dev/block/bootdevice/by-name/vendor_dlkm								flags=display="VendorDLKM Image";backup;flashimg

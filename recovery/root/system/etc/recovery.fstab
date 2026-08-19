@@ -9,16 +9,6 @@ system				/system			ext4		ro																	wait,slotselect,logical
 vendor				/vendor			erofs		ro																	wait,slotselect,logical
 product				/product		erofs		ro																	wait,slotselect,logical
 system_ext			/system_ext		erofs		ro																	wait,slotselect,logical
-vendor_dlkm			/vendor_dlkm		ext4		ro																	wait,slotselect,logical
-odm_dlkm			/odm_dlkm		ext4		ro																	wait,slotselect,logical
-tr_mi				/tr_mi			ext4		ro																	wait,slotselect,logical,nofail
-tr_theme			/tr_theme		ext4		ro																	wait,slotselect,logical,nofail
-tr_region			/tr_region		ext4		ro																	wait,slotselect,logical,nofail
-tr_company			/tr_company		ext4		ro																	wait,slotselect,logical,nofail
-tr_carrier			/tr_carrier		ext4		ro																	wait,slotselect,logical,nofail
-tr_product			/tr_product		erofs		ro																	wait,slotselect,logical,nofail
-tr_preload			/tr_preload		erofs		ro																	wait,slotselect,logical,nofail
-
 # Userdata partition
 /dev/block/by-name/metadata	/metadata		ext4		noatime,nosuid,nodev,discard														wait,check,formattable
 /dev/block/by-name/userdata	/data			f2fs		noatime,nosuid,nodev,discard,noflush_merge,fsync_mode=nobarrier,reserve_root=134217,resgid=1065,inlinecrypt				wait,check,formattable,fileencryption=aes-256-xts:aes-256-cts:v2+inlinecrypt_optimized,keydirectory=/metadata/vold/metadata_encryption
