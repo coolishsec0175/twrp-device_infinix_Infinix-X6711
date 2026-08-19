@@ -60,12 +60,18 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     permissions:
       contents: write
+    outputs:
+      start_epoch: ${{ steps.start.outputs.epoch }}
+      commit_id: ${{ steps.clone.outputs.commit_id }}
     steps:
     - name: Checkout Repository
       uses: actions/checkout@v3
 
     - name: Build Started
-      run: echo "BUILD_START_EPOCH=$(date +%s)" >> $GITHUB_ENV
+      id: start
+      run: |
+        echo "BUILD_START_EPOCH=$(date +%s)" >> $GITHUB_ENV
+        echo "epoch=$(date +%s)" >> $GITHUB_OUTPUT
 
     - name: Clean-up Environment
       uses: rokibhasansagar/slimhub_actions@main
@@ -94,11 +100,13 @@ jobs:
         ./orangefox_sync.sh --branch ${{ github.event.inputs.MANIFEST_BRANCH }} --path ${GITHUB_WORKSPACE}/OrangeFox/fox_${{ github.event.inputs.MANIFEST_BRANCH }}
 
     - name: Clone Device Tree & Inject Hook Script
+      id: clone
       run: |
         cd ${GITHUB_WORKSPACE}/OrangeFox/fox_${{ github.event.inputs.MANIFEST_BRANCH }}
         git clone ${{ github.event.inputs.DEVICE_TREE }} -b ${{ github.event.inputs.DEVICE_TREE_BRANCH }} ./${{ github.event.inputs.DEVICE_PATH }}
         cd ${{ github.event.inputs.DEVICE_PATH }}
         echo "COMMIT_ID=$(git rev-parse HEAD)" >> $GITHUB_ENV
+        echo "commit_id=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
         
         # Inject postrecoveryboot.sh into the cloned device tree root
         mkdir -p recovery/root/system/bin
@@ -181,30 +189,52 @@ jobs:
         echo "Done checking missing dependencies."
       continue-on-error: true
 
-    - name: Send Telegram Notification
-      if: always()
-      env:
-        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        RECOVERY_NAME: OFRP
-      run: |
-        if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
-          echo "Telegram secrets not set. Skipping notification."
-          exit 0
-        fi
-        START_TIME=$(date -u -d "@$BUILD_START_EPOCH" +"%H:%M:%S UTC")
-        END_TIME=$(date +%s)
-        DURATION_SECS=$((END_TIME - BUILD_START_EPOCH))
-        DURATION=$(printf '%02d:%02d:%02d' $((DURATION_SECS/3600)) $(((DURATION_SECS%3600)/60)) $((DURATION_SECS%60)))
-        SHORT_COMMIT=$(echo "$COMMIT_ID" | cut -c1-7)
-        JOB_STATUS="${{ job.status }}"
-        RELEASE_LINK="https://github.com/${{ github.repository }}/releases/tag/${{ github.run_id }}"
-        if [ "$JOB_STATUS" = "success" ]; then
-          CAPTION=$(printf '✅ Build Completed for Recovery on %s\nStarted: %s\nDuration: %s\n📊 Build: %s\n\n🔧 Configuration:\n- Commit: <code>%s</code>\n\n📥 <a href="%s">Download from Releases</a>' "${{ github.event.inputs.DEVICE_NAME }}" "$START_TIME" "$DURATION" "$RECOVERY_NAME" "$SHORT_COMMIT" "$RELEASE_LINK")
-        else
-          CAPTION=$(printf '❌ Build Failed for Recovery on %s\nStarted: %s\nDuration: %s\n📊 Build: %s\n\n🔧 Configuration:\n- Commit: <code>%s</code>' "${{ github.event.inputs.DEVICE_NAME }}" "$START_TIME" "$DURATION" "$RECOVERY_NAME" "$SHORT_COMMIT")
-        fi
-        curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-          -d chat_id="${TELEGRAM_CHAT_ID}" \
-          -d text="${CAPTION}" \
-          -d parse_mode="HTML"
+  notify-started:
+    name: Notify Telegram (started)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send started alert
+        env:
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+        run: |
+          if [ -z "$TG_BOT_TOKEN" ] || [ -z "$TG_CHAT_ID" ]; then
+            echo "Telegram secrets not set. Skipping notification."
+            exit 0
+          fi
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          START_TS="$(date +"%m/%d/%y %I:%M %p")"
+          MSG="$(printf '%b' "<b>⚙️ OrangeFox Build Started</b>\n📋 <b>Workflow:</b> OrangeFox [OFRP]\n📱 <b>Device:</b> Infinix X6711\n🌿 <b>Tree Branch:</b> <code>${{ github.event.inputs.DEVICE_TREE_BRANCH }}</code>\n🧬 <b>Build:</b> <code>${{ github.event.inputs.BUILD_TARGET }}</code> | <code>${{ github.event.inputs.MANIFEST_BRANCH }}</code>\n🔍 <a href=\"${RUN_URL}\">Watch on GitHub Actions</a>\n[${START_TS}]")"
+          curl -s -o /dev/null -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" -d chat_id="${TG_CHAT_ID}" --data-urlencode text="$MSG" -d parse_mode="HTML" -d disable_web_page_preview=true
+
+  notify-done:
+    name: Notify Telegram (done)
+    needs: build
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send completion alert
+        env:
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+        run: |
+          if [ -z "$TG_BOT_TOKEN" ] || [ -z "$TG_CHAT_ID" ]; then
+            echo "Telegram secrets not set. Skipping notification."
+            exit 0
+          fi
+          START_EPOCH="${{ needs.build.outputs.start_epoch }}"
+          COMMIT_ID="${{ needs.build.outputs.commit_id }}"
+          [ -z "$START_EPOCH" ] && START_EPOCH=$(date +%s)
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          RELEASE_LINK="https://github.com/${{ github.repository }}/releases/tag/${{ github.run_id }}"
+          END_TIME=$(date +%s)
+          DURATION_SECS=$((END_TIME - START_EPOCH))
+          DURATION=$(printf '%02d:%02d:%02d' $((DURATION_SECS/3600)) $(((DURATION_SECS%3600)/60)) $((DURATION_SECS%60)))
+          SHORT_COMMIT=$(echo "$COMMIT_ID" | cut -c1-7)
+          JOB_STATUS="${{ needs.build.result }}"
+          if [ "$JOB_STATUS" = "success" ]; then
+            MSG="$(printf '%b' "<b>✅ OrangeFox Build Completed</b>\n📱 <b>Device:</b> Infinix X6711\n⏱ <b>Duration:</b> ${DURATION}\n🧬 <b>Build:</b> <code>${{ github.event.inputs.BUILD_TARGET }}</code> | <code>${{ github.event.inputs.MANIFEST_BRANCH }}</code>\n🔧 <b>Commit:</b> <code>${SHORT_COMMIT}</code>\n📥 <a href=\"${RELEASE_LINK}\">Download from Releases</a>\n🔍 <a href=\"${RUN_URL}\">View on GitHub Actions</a>")"
+          else
+            MSG="$(printf '%b' "<b>❌ OrangeFox Build Failed</b>\n📱 <b>Device:</b> Infinix X6711\n⏱ <b>Duration:</b> ${DURATION}\n🧬 <b>Build:</b> <code>${{ github.event.inputs.BUILD_TARGET }}</code> | <code>${{ github.event.inputs.MANIFEST_BRANCH }}</code>\n🔧 <b>Commit:</b> <code>${SHORT_COMMIT}</code>\n🔍 <a href=\"${RUN_URL}\">View on GitHub Actions</a>")"
+          fi
+          curl -s -o /dev/null -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" -d chat_id="${TG_CHAT_ID}" --data-urlencode text="$MSG" -d parse_mode="HTML" -d disable_web_page_preview=true
