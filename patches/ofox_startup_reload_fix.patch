@@ -1,4 +1,4 @@
-﻿diff --git a/bootable/recovery/data.cpp b/data.cpp
+diff --git a/bootable/recovery/data.cpp b/bootable/recovery/data.cpp
 index 5373ff7..164ea3e 100755
 --- a/bootable/recovery/data.cpp
 +++ b/bootable/recovery/data.cpp
@@ -66,7 +66,7 @@ index 5373ff7..164ea3e 100755
  			convert_temp = strtoul(results.c_str(), NULL, 0) / 1000;
  			if (convert_temp <= 0)
  				convert_temp = strtoul(results.c_str(), NULL, 0);
-diff --git a/bootable/recovery/gui/action.cpp b/gui/action.cpp
+diff --git a/bootable/recovery/gui/action.cpp b/bootable/recovery/gui/action.cpp
 index 293dd16..4eec13f 100755
 --- a/bootable/recovery/gui/action.cpp
 +++ b/bootable/recovery/gui/action.cpp
@@ -236,7 +236,7 @@ index b182575..1ab302a 100755
  void PageManager::ReleasePackage(std::string name)
  {
  	std::map<std::string, PageSet*>::iterator iter;
-diff --git a/bootable/recovery/twrp.cpp b/twrp.cpp
+diff --git a/bootable/recovery/twrp.cpp b/bootable/recovery/twrp.cpp
 index 6f9e858..e804438 100644
 --- a/bootable/recovery/twrp.cpp
 +++ b/bootable/recovery/twrp.cpp

@@ -118,9 +118,9 @@ jobs:
 
     - name: Apply OrangeFox Source Patches
       run: |
-        cd ${GITHUB_WORKSPACE}/OrangeFox/fox_${{ github.event.inputs.MANIFEST_BRANCH }}
+        cd ${GITHUB_WORKSPACE}/OrangeFox/fox_${{ github.event.inputs.MANIFEST_BRANCH }}/bootable/recovery
         if [ -f "${GITHUB_WORKSPACE}/patches/ofox_startup_reload_fix.patch" ]; then
-          git apply --recount --3way ${GITHUB_WORKSPACE}/patches/ofox_startup_reload_fix.patch
+          git apply --recount -p3 ${GITHUB_WORKSPACE}/patches/ofox_startup_reload_fix.patch
           echo "Applied ofox_startup_reload_fix: validate/discard stale themes + skip startup theme reload"
         fi
 
