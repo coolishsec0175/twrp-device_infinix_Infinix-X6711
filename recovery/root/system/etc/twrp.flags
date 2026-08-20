@@ -7,11 +7,11 @@
 /boot			emmc		/dev/block/by-name/boot											flags=display=boot;slotselect;backup;flashimg
 /vendor_boot		emmc		/dev/block/by-name/vendor_boot										flags=display=vendor_boot;slotselect;backup;flashimg
 /vbmeta			emmc		/dev/block/by-name/vbmeta										flags=display=vbmeta;slotselect;backup;flashimg
-/vbmeta_system		emmc		/dev/block/by-name/vbmeta_system									flags=display=vbmeta_system;slotselect;backup;flashimg
-/vbmeta_vendor		emmc		/dev/block/by-name/vbmeta_vendor									flags=display=vbmeta_vendor;slotselect;backup;flashimg
+/vbmeta_system		emmc		/dev/block/by-name/vbmeta_system									flags=display=vbmeta_system;slotselect;backup
+/vbmeta_vendor		emmc		/dev/block/by-name/vbmeta_vendor									flags=display=vbmeta_vendor;slotselect;backup
 
 # Firmware
-/dtbo			emmc		/dev/block/by-name/dtbo											flags=display=dtbo;slotselect;backup;flashimg
+/dtbo			emmc		/dev/block/by-name/dtbo											flags=display=dtbo;slotselect;backup
 /metadata		ext4		/dev/block/by-name/metadata										flags=display=metadata;backup
 /misc			emmc		/dev/block/by-name/misc											flags=display=misc;backup
 
@@ -21,10 +21,10 @@
 /frp			emmc		/dev/block/by-name/frp											flags=display=frp;backup
 
 # IMEI and modem related
-/nvdata			ext4		/dev/block/by-name/nvdata										flags=display=nvdata;backup;flashimg
+/nvdata			ext4		/dev/block/by-name/nvdata										flags=display=nvdata;backup
 /protect_1		ext4		/dev/block/by-name/protect1										flags=display=protect_1;backup
 /protect_2		ext4		/dev/block/by-name/protect2										flags=display=protect_2;backup
-/nvram			emmc		/dev/block/by-name/nvram										flags=display=nvram;backup;flashimg
+/nvram			emmc		/dev/block/by-name/nvram										flags=display=nvram;backup
 /proinfo		emmc		/dev/block/by-name/proinfo										flags=display=proinfo;backup
 
 # Bootloader
@@ -33,6 +33,10 @@
 /logo			emmc		/dev/block/by-name/logo											flags=display=logo;backup
 /otp			emmc		/dev/block/by-name/otp											flags=display=otp;backup
 /seccfg			emmc		/dev/block/by-name/seccfg										flags=display=seccfg;backup
+
+# Dynamic / Logical partitions
+/vendor			erofs		/dev/block/by-name/vendor										flags=display=vendor;slotselect;flashimg
+/super			emmc		/dev/block/by-name/super										flags=display=super;flashimg
 
 # Removable Storage
 /external_sd		auto		/dev/block/mmcblk1p1				/dev/block/mmcblk0p1					flags=display="Micro SD Card";storage;wipeingui;removable;backup=0
