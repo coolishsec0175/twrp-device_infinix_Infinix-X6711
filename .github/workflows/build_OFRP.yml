@@ -79,12 +79,35 @@ jobs:
     - name: Setup Swap Space
       uses: pierotofy/set-swap-space@master
       with:
-        swap-size-gb: 12
+        swap-size-gb: 16
+
+    - name: Cache Ubuntu packages
+      id: ubuntu-cache
+      uses: actions/cache@v4
+      with:
+        path: |
+          /var/cache/apt/archives
+          /usr/local
+          /opt
+        key: ubuntu-build-env-${{ runner.os }}-v1
+        restore-keys: |
+          ubuntu-build-env-${{ runner.os }}-
+
+    - name: Cache CCACHE
+      id: ccache-cache
+      uses: actions/cache@v4
+      with:
+        path: ~/.ccache
+        key: ccache-${{ runner.os }}-${{ github.event.inputs.MANIFEST_BRANCH }}-v1
+        restore-keys: |
+          ccache-${{ runner.os }}-
 
     - name: Setup Build Environment
       run: |
         sudo apt install aria2 -y
-        git clone https://gitlab.com/OrangeFox/misc/scripts
+        if [ ! -d "${GITHUB_WORKSPACE}/scripts" ]; then
+          git clone https://gitlab.com/OrangeFox/misc/scripts
+        fi
         cd scripts
         sudo bash setup/android_build_env.sh
 
@@ -93,11 +116,15 @@ jobs:
       run: |
         mkdir -p ${GITHUB_WORKSPACE}/OrangeFox
         cd ${GITHUB_WORKSPACE}/OrangeFox
-        git config --global user.name "coolishsec0175"
-        git config --global user.email "coolishsec0175@users.noreply.github.com"
-        git clone https://gitlab.com/OrangeFox/sync.git
-        cd sync
-        ./orangefox_sync.sh --branch ${{ github.event.inputs.MANIFEST_BRANCH }} --path ${GITHUB_WORKSPACE}/OrangeFox/fox_${{ github.event.inputs.MANIFEST_BRANCH }}
+        if [ ! -d "fox_${{ github.event.inputs.MANIFEST_BRANCH }}/build" ]; then
+          git config --global user.name "coolishsec0175"
+          git config --global user.email "coolishsec0175@users.noreply.github.com"
+          git clone https://gitlab.com/OrangeFox/sync.git
+          cd sync
+          ./orangefox_sync.sh --branch ${{ github.event.inputs.MANIFEST_BRANCH }} --path ${GITHUB_WORKSPACE}/OrangeFox/fox_${{ github.event.inputs.MANIFEST_BRANCH }}
+        else
+          echo "OrangeFox source already present - skipping sync"
+        fi
 
     - name: Clone Device Tree & Inject Hook Script
       id: clone
@@ -129,11 +156,14 @@ jobs:
       id: fox_branch
       with:
         cond: ${{ github.event.inputs.MANIFEST_BRANCH == '11.0' || github.event.inputs.MANIFEST_BRANCH == '12.1' }}
-        if_true: lunch twrp_${{ github.event.inputs.DEVICE_NAME }}-eng && make clean && mka adbd ${{ github.event.inputs.BUILD_TARGET }}image
-        if_false: lunch omni_${{ github.event.inputs.DEVICE_NAME }}-eng && make clean && mka ${{ github.event.inputs.BUILD_TARGET }}image
+        if_true: lunch twrp_${{ github.event.inputs.DEVICE_NAME }}-eng && mka adbd ${{ github.event.inputs.BUILD_TARGET }}image
+        if_false: lunch omni_${{ github.event.inputs.DEVICE_NAME }}-eng && mka ${{ github.event.inputs.BUILD_TARGET }}image
 
     - name: Building OrangeFox
       run: |
+        export CCACHE_DIR=~/.ccache
+        export CCACHE_EXEC=/usr/bin/ccache
+        ccache -M 50G || true
         cd ${GITHUB_WORKSPACE}/OrangeFox/fox_${{ github.event.inputs.MANIFEST_BRANCH }}
         set +e
         source build/envsetup.sh
